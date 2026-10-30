@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Corretor - EE São Tomaz de Aquino</title>
+  
+  <!-- CSS e Bibliotecas Externas -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <style>
+    @media print {
+      .no-print { display: none !important; }
+      .page-break { page-break-after: always; break-after: page; }
+      body { background: white; color: black; }
+    }
+    
+    .sheet-a4 {
+      width: 210mm;
+      min-height: 297mm;
+      padding: 15mm;
+      margin: auto;
+      background: white;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      box-sizing: border-box;
+    }
+
+    .bubble {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1.5px solid #000;
+      font-size: 10px;
+      font-weight: bold;
+    }
+    .bubble-circle { border-radius: 50%; width: 22px; height: 22px; }
+    .bubble-square { border-radius: 2px; width: 22px; height: 22px; }
+    .bubble-ellipse { border-radius: 40%; width: 26px; height: 18px; }
+
+    .q-number {
+      margin-right: 4px; /* < 1cm (~37px max, 4px aproxima o máximo possível) */
+      font-weight: bold;
+      min-width: 20px;
+      text-align: right;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen">
+
+  <!-- CABEÇALHO FIXO DO APP -->
+  <header class="bg-blue-800 text-white shadow-lg no-print">
+    <div class="max-w-6xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-2">
+      <h1 class="text-xl font-bold tracking-wide text-center sm:text-left">
+        Escola Estadual São Tomaz de Aquino
+      </h1>
+      <span class="bg-blue-900 text-blue-200 text-xs px-3 py-1 rounded-full border border-blue-700">
+        Sistema de Avaliações
+      </span>
+    </div>
+  </header>
+
+  <!-- NAVEGAÇÃO / ABAS -->
+  <nav class="bg-blue-700 text-white border-t border-blue-600 no-print">
+    <div class="max-w-6xl mx-auto flex overflow-x-auto text-sm font-medium">
+      <button onclick="switchTab('turmas')" id="tab-turmas" class="px-5 py-3 hover:bg-blue-600 border-b-2 border-white font-bold">1. Turmas e Alunos</button>
+      <button onclick="switchTab('avaliacoes')" id="tab-avaliacoes" class="px-5 py-3 hover:bg-blue-600 border-b-2 border-transparent">2. Cadastrar Prova</button>
+      <button onclick="switchTab('gabaritos')" id="tab-gabaritos" class="px-5 py-3 hover:bg-blue-600 border-b-2 border-transparent">3. Gerar Gabaritos (PDF)</button>
+      <button onclick="switchTab('correcao')" id="tab-correcao" class="px-5 py-3 hover:bg-blue-600 border-b-2 border-transparent">4. Leitor e Correção</button>
+      <button onclick="switchTab('relatorios')" id="tab-relatorios" class="px-5 py-3 hover:bg-blue-600 border-b-2 border-transparent">5. Relatórios e Notas</button>
+    </div>
+  </nav>
+
+  <main class="max-w-6xl mx-auto p-4 no-print">
+
+    <!-- SEÇÃO 1: TURMAS E ALUNOS -->
+    <section id="sec-turmas" class="space-y-6">
+      <div class="grid md:grid-cols-2 gap-6">
+        <!-- Cadastrar/Editar Turma -->
+        <div class="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+          <h2 class="text-lg font-bold text-slate-800 mb-4" id="turma-form-title">Cadastrar Turma</h2>
+          <form onsubmit="saveTurma(event)" class="space-y-3">
+            <input type="hidden" id="turma-id">
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Nome da Turma</label>
+              <input type="text" id="turma-nome" placeholder="Ex: 8º Ano A, 8º Ano B, 9º1" required class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div class="flex gap-2">
+              <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 font-medium">Salvar Turma</button>
+              <button type="button" onclick="resetTurmaForm()" class="bg-slate-200 text-slate-700 px-4 py-2 rounded text-sm hover:bg-slate-300">Cancelar</button>
+            </div>
+          </form>
+
+          <h3 class="text-sm font-bold text-slate-700 mt-6 mb-2">Turmas Cadastradas (Ordenadas)</h3>
+          <div id="lista-turmas" class="space-y-2 max-h-60 overflow-y-auto"></div>
+        </div>
+
+        <!-- Cadastrar/Editar Aluno -->
+        <div class="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+          <h2 class="text-lg font-bold text-slate-800 mb-4" id="aluno-form-title">Cadastrar Aluno</h2>
+          <form onsubmit="saveAluno(event)" class="space-y-3">
+            <input type="hidden" id="aluno-id">
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Turma</label>
+              <select id="aluno-turma-id" required class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"></select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Nome Completo do Aluno</label>
+              <input type="text" id="aluno-nome" placeholder="Ex: Ana Silva Santos" required class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div class="flex gap-2">
+              <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 font-medium">Salvar Aluno</button>
+              <button type="button" onclick="resetAlunoForm()" class="bg-slate-200 text-slate-700 px-4 py-2 rounded text-sm hover:bg-slate-300">Cancelar</button>
+            </div>
+          </form>
+
+          <h3 class="text-sm font-bold text-slate-700 mt-6 mb-2">Alunos da Turma Selecionada (Ordem Alfabética)</h3>
+          <select id="filtro-turma-alunos" onchange="renderAlunosList()" class="w-full border rounded px-3 py-2 text-sm mb-3"></select>
+          <div id="lista-alunos" class="space-y-2 max-h-60 overflow-y-auto"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SEÇÃO 2: CADASTRAR AVALIAÇÃO COM PREVIEW -->
+    <section id="sec-avaliacoes" class="hidden space-y-6">
+      <div class="grid lg:grid-cols-2 gap-6">
+        <!-- Form Avaliação -->
+        <div class="bg-white p-5 rounded-lg shadow-sm border border-slate-200 space-y-4">
+          <h2 class="text-lg font-bold text-slate-800">Nova Avaliação</h2>
+          
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Nome da Avaliação</label>
+            <input type="text" id="prova-nome" placeholder="Ex: Avaliação Bimestral de Matemática" oninput="updatePreview()" class="w-full border rounded px-3 py-2 text-sm">
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Valor Total da Prova</label>
+              <input type="number" id="prova-valor" value="10" step="0.5" oninput="updatePreview()" class="w-full border rounded px-3 py-2 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Nº de Questões</label>
+              <input type="number" id="prova-num-questoes" value="10" min="1" max="50" onchange="generateAnswersConfig()" oninput="updatePreview()" class="w-full border rounded px-3 py-2 text-sm">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Opções</label>
+              <select id="prova-opcoes" onchange="updatePreview()" class="w-full border rounded px-3 py-2 text-sm">
+                <option value="4">4 (A, B, C, D)</option>
+                <option value="5">5 (A, B, C, D, E)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Formato</label>
+              <select id="prova-formato" onchange="updatePreview()" class="w-full border rounded px-3 py-2 text-sm">
+                <option value="circle">Círculo</option>
+                <option value="square">Quadrado</option>
+                <option value="ellipse">Elipse</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Colunas</label>
+              <select id="prova-colunas" onchange="updatePreview()" class="w-full border rounded px-3 py-2 text-sm">
+                <option value="1">1 Coluna</option>
+                <option value="2">2 Colunas</option>
+                <option value="3">3 Colunas</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Aplicar para as Turmas:</label>
+            <div id="turmas-checkboxes" class="space-y-1 max-h-32 overflow-y-auto border p-2 rounded"></div>
+          </div>
+
+          <!-- Definir Gabarito -->
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-600 mb-2">Gabarito Oficial (Resposta Correta)</label>
+            <div id="gabarito-respostas-config" class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-2 border rounded"></div>
+          </div>
+
+          <button onclick="saveAvaliacao()" class="w-full bg-blue-600 text-white py-2 rounded text-sm font-bold hover:bg-blue-700">Salvar Avaliação</button>
+        </div>
+
+        <!-- Preview em Tempo Real -->
+        <div class="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+          <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2">Visualização em Tempo Real do Gabarito</h2>
+          <div class="border p-4 bg-white rounded min-h-[400px] text-xs" id="preview-container">
+            <!-- Renderizado dinamicamente -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SEÇÃO 3: GERAR GABARITOS INDIVIDUALIZADOS (PDF) -->
+    <section id="sec-gabaritos" class="hidden space-y-4">
+      <div class="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+        <h2 class="text-lg font-bold text-slate-800 mb-2">Gerar Gabaritos Individualizados</h2>
+        <p class="text-xs text-slate-600 mb-4">Selecione uma avaliação para gerar um PDF único contendo todas as folhas de respostas ajustadas para A4 com QR Code individual por aluno.</p>
+
+        <div class="flex flex-col sm:flex-row gap-3">
+          <select id="select-avaliacao-pdf" class="border rounded px-3 py-2 text-sm flex-1"></select>
+          <button onclick="renderPDFGabaritos()" class="bg-purple-600 text-white px-5 py-2 rounded text-sm font-bold hover:bg-purple-700">Visualizar / Imprimir PDF</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SEÇÃO 4: LEITOR E CORREÇÃO POR CÂMERA -->
+    <section id="sec-correcao" class="hidden space-y-6">
+      <div class="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+        <h2 class="text-lg font-bold text-slate-800 mb-2">Leitor de Gabarito por Câmera</h2>
+        <p class="text-xs text-slate-600 mb-4">Aponte a câmera para o QR Code da folha do aluno para identificar automaticamente a prova e efetuar a correção imediata.</p>
+
+        <div class="max-w-md mx-auto">
+          <div id="reader" class="w-full rounded overflow-hidden border"></div>
+          <div class="flex gap-2 mt-3">
+            <button onclick="startScanner()" class="flex-1 bg-green-600 text-white py-2 rounded text-sm font-bold">Iniciar Câmera</button>
+            <button onclick="stopScanner()" class="flex-1 bg-red-600 text-white py-2 rounded text-sm font-bold">Parar Câmera</button>
+          </div>
+        </div>
+
+        <div id="scan-result" class="mt-6 hidden bg-slate-50 p-4 rounded border">
+          <h3 class="font-bold text-slate-800 text-sm mb-2">Última Leitura / Correção Manual:</h3>
+          <div id="scan-info" class="text-xs space-y-1 mb-4"></div>
+          
+          <div id="questoes-manual-input" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4"></div>
+          
+          <button onclick="salvarNotaLeitura()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold">Confirmar e Salvar Nota</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SEÇÃO 5: RELATÓRIOS E PLANILHAS -->
+    <section id="sec-relatorios" class="hidden space-y-6">
+      <div class="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+        <h2 class="text-lg font-bold text-slate-800 mb-4">Planilha de Notas por Turma</h2>
+        
+        <div class="grid sm:grid-cols-2 gap-3 mb-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Selecione a Avaliação</label>
+            <select id="relatorio-avaliacao-id" onchange="renderRelatorio()" class="w-full border rounded px-3 py-2 text-sm"></select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Selecione a Turma</label>
+            <select id="relatorio-turma-id" onchange="renderRelatorio()" class="w-full border rounded px-3 py-2 text-sm"></select>
+          </div>
+        </div>
+
+        <button onclick="imprimirRelatorio()" class="bg-blue-800 text-white px-4 py-2 rounded text-sm font-bold hover:bg-blue-900 mb-4">Exportar / Imprimir Planilha em PDF</button>
+
+        <!-- Tabela do Relatório -->
+        <div id="relatorio-print-area" class="bg-white p-4 border rounded">
+          <div class="text-center border-b pb-3 mb-3">
+            <h2 class="text-base font-bold uppercase">Escola Estadual São Tomaz de Aquino</h2>
+            <p class="text-xs font-semibold text-slate-700" id="relatorio-header-turma-prova">Selecione os dados acima</p>
+          </div>
+
+          <table class="w-full text-xs text-left border-collapse border border-slate-300">
+            <thead>
+              <tr class="bg-slate-100">
+                <th class="border border-slate-300 p-2">Nº</th>
+                <th class="border border-slate-300 p-2">Nome do Aluno</th>
+                <th class="border border-slate-300 p-2 text-center">Acertos</th>
+                <th class="border border-slate-300 p-2 text-center">Nota Final</th>
+                <th class="border border-slate-300 p-2 text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody id="relatorio-tbody">
+              <tr><td colspan="5" class="p-3 text-center text-slate-400">Nenhum dado selecionado.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- CONTAINER DE IMPRESSÃO EXCLUSIVO PARA FOLHAS DE GABARITO (A4) -->
+  <div id="print-area-gabaritos" class="hidden"></div>
+
+  <!-- SCRIPT DA APLICAÇÃO -->
+  <script>
+    // ESTADO DA APLICAÇÃO (LOCALSTORAGE)
+    let db = {
+      turmas: JSON.parse(localStorage.getItem('corretor_turmas')) || [],
+      alunos: JSON.parse(localStorage.getItem('corretor_alunos')) || [],
+      avaliacoes: JSON.parse(localStorage.getItem('corretor_avaliacoes')) || [],
+      respostas: JSON.parse(localStorage.getItem('corretor_respostas')) || []
+    };
+
+    let html5QrCode = null;
+    let currentScanData = null;
+
+    function saveData() {
+      localStorage.setItem('corretor_turmas', JSON.stringify(db.turmas));
+      localStorage.setItem('corretor_alunos', JSON.stringify(db.alunos));
+      localStorage.setItem('corretor_avaliacoes', JSON.stringify(db.avaliacoes));
+      localStorage.setItem('corretor_respostas', JSON.stringify(db.respostas));
+    }
+
+    // ALTERNAR ABAS
+    function switchTab(tab) {
+      ['turmas', 'avaliacoes', 'gabaritos', 'correcao', 'relatorios'].forEach(t => {
+        document.getElementById(`sec-${t}`).classList.add('hidden');
+        document.getElementById(`tab-${t}`).classList.remove('border-white', 'font-bold');
+        document.getElementById(`tab-${t}`).classList.add('border-transparent');
+      });
+
+      document.getElementById(`sec-${tab}`).classList.remove('hidden');
+      document.getElementById(`tab-${tab}`).classList.add('border-white', 'font-bold');
+
+      if(tab === 'turmas') renderTurmasList();
+      if(tab === 'avaliacoes') { renderTurmasCheckboxes(); generateAnswersConfig(); updatePreview(); }
+      if(tab === 'gabaritos') renderSelectAvaliacaoPDF();
+      if(tab === 'relatorios') setupRelatoriosSelects();
+    }
+
+    // --- MÓDULO 1: TURMAS E ALUNOS ---
+    function saveTurma(e) {
+      e.preventDefault();
+      const id = document.getElementById('turma-id').value;
+      const nome = document.getElementById('turma-nome').value.trim();
+
+      if (id) {
+        const index = db.turmas.findIndex(t => t.id === id);
+        if (index !== -1) db.turmas[index].nome = nome;
+      } else {
+        db.turmas.push({ id: 't_' + Date.now(), nome });
+      }
+
+      // Ordenar turmas numérico/alfabético
+      db.turmas.sort((a, b) => a.nome.localeCompare(b.nome, undefined, { numeric: true, sensitivity: 'base' }));
+
+      saveData();
+      resetTurmaForm();
+      renderTurmasList();
+    }
+
+    function editTurma(id) {
+      const t = db.turmas.find(item => item.id === id);
+      if (!t) return;
+      document.getElementById('turma-id').value = t.id;
+      document.getElementById('turma-nome').value = t.nome;
+      document.getElementById('turma-form-title').innerText = "Editar Turma";
+    }
+
+    function resetTurmaForm() {
+      document.getElementById('turma-id').value = '';
+      document.getElementById('turma-nome').value = '';
+      document.getElementById('turma-form-title').innerText = "Cadastrar Turma";
+    }
+
+    function renderTurmasList() {
+      const container = document.getElementById('lista-turmas');
+      const selectAlunos = document.getElementById('aluno-turma-id');
+      const filtroAlunos = document.getElementById('filtro-turma-alunos');
+
+      container.innerHTML = '';
+      selectAlunos.innerHTML = '<option value="">Selecione uma turma...</option>';
+      filtroAlunos.innerHTML = '<option value="">Todas as Turmas</option>';
+
+      db.turmas.forEach(t => {
+        container.innerHTML += `
+          <div class="flex justify-between items-center p-2 bg-slate-50 border rounded text-xs">
+            <span class="font-bold text-slate-700">${t.nome}</span>
+            <button onclick="editTurma('${t.id}')" class="text-blue-600 hover:underline">Editar</button>
+          </div>
+        `;
+        selectAlunos.innerHTML += `<option value="${t.id}">${t.nome}</option>`;
+        filtroAlunos.innerHTML += `<option value="${t.id}">${t.nome}</option>`;
+      });
+
+      renderAlunosList();
+    }
+
+    function saveAluno(e) {
+      e.preventDefault();
+      const id = document.getElementById('aluno-id').value;
+      const turmaId = document.getElementById('aluno-turma-id').value;
+      const nome = document.getElementById('aluno-nome').value.trim();
+
+      if (!turmaId) return alert('Selecione uma turma.');
+
+      if (id) {
+        const index = db.alunos.findIndex(a => a.id === id);
+        if (index !== -1) {
+          db.alunos[index].nome = nome;
+          db.alunos[index].turmaId = turmaId;
+        }
+      } else {
+        db.alunos.push({ id: 'a_' + Date.now(), turmaId, nome });
+      }
+
+      // Ordenar alunos por ordem alfabética
+      db.alunos.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
+      saveData();
+      resetAlunoForm();
+      renderAlunosList();
+    }
+
+    function editAluno(id) {
+      const a = db.alunos.find(item => item.id === id);
+      if (!a) return;
+      document.getElementById('aluno-id').value = a.id;
+      document.getElementById('aluno-turma-id').value = a.turmaId;
+      document.getElementById('aluno-nome').value = a.nome;
+      document.getElementById('aluno-form-title').innerText = "Editar Aluno";
+    }
+
+    function resetAlunoForm() {
+      document.getElementById('aluno-id').value = '';
+      document.getElementById('aluno-nome').value = '';
+      document.getElementById('aluno-form-title').innerText = "Cadastrar Aluno";
+    }
+
+    function renderAlunosList() {
+      const container = document.getElementById('lista-alunos');
+      const turmaFiltro = document.getElementById('filtro-turma-alunos').value;
+
+      container.innerHTML = '';
+      let filtrados = db.alunos;
+      if (turmaFiltro) {
+        filtrados = db.alunos.filter(a => a.turmaId === turmaFiltro);
+      }
+
+      filtrados.forEach(a => {
+        const turma = db.turmas.find(t => t.id === a.turmaId);
+        container.innerHTML += `
+          <div class="flex justify-between items-center p-2 bg-slate-50 border rounded text-xs">
+            <div>
+              <span class="font-medium text-slate-800">${a.nome}</span>
+              <span class="text-[10px] bg-slate-200 px-1.5 py-0.5 rounded ml-2">${turma ? turma.nome : ''}</span>
+            </div>
+            <button onclick="editAluno('${a.id}')" class="text-blue-600 hover:underline">Editar</button>
+          </div>
+        `;
+      });
+    }
+
+    // --- MÓDULO 2: AVALIAÇÃO & PREVIEW ---
+    function renderTurmasCheckboxes() {
+      const container = document.getElementById('turmas-checkboxes');
+      container.innerHTML = '';
+      db.turmas.forEach(t => {
+        container.innerHTML += `
+          <label class="flex items-center gap-2 text-xs">
+            <input type="checkbox" value="${t.id}" class="turma-checkbox">
+            ${t.nome}
+          </label>
+        `;
+      });
+    }
+
+    function generateAnswersConfig() {
+      const num = parseInt(document.getElementById('prova-num-questoes').value) || 10;
+      const opts = parseInt(document.getElementById('prova-opcoes').value);
+      const container = document.getElementById('gabarito-respostas-config');
+      container.innerHTML = '';
+
+      const letras = ['A', 'B', 'C', 'D', 'E'];
+
+      for (let i = 1; i <= num; i++) {
+        let optionsHtml = '';
+        for (let j = 0; j < opts; j++) {
+          optionsHtml += `<option value="${letras[j]}">${letras[j]}</option>`;
+        }
+        container.innerHTML += `
+          <div class="flex items-center gap-1 text-xs">
+            <span class="font-bold w-6">${i}.</span>
+            <select class="gabarito-resposta-item border rounded px-1 py-0.5 w-full text-xs" data-q="${i}">
+              ${optionsHtml}
+            </select>
+          </div>
+        `;
+      }
+    }
+
+    function updatePreview() {
+      const nome = document.getElementById('prova-nome').value || 'NOME DA AVALIAÇÃO';
+      const num = parseInt(document.getElementById('prova-num-questoes').value) || 10;
+      const opts = parseInt(document.getElementById('prova-opcoes').value);
+      const formato = document.getElementById('prova-formato').value;
+      const cols = parseInt(document.getElementById('prova-colunas').value);
+
+      const preview = document.getElementById('preview-container');
+      const letras = ['A', 'B', 'C', 'D', 'E'].slice(0, opts);
+
+      let gridColsClass = 'grid-cols-1';
+      if (cols === 2) gridColsClass = 'grid-cols-2';
+      if (cols === 3) gridColsClass = 'grid-cols-3';
+
+      let itemsHtml = '';
+      for (let i = 1; i <= num; i++) {
+        let bubbles = letras.map(l => `<span class="bubble bubble-${formato}">${l}</span>`).join(' ');
+        itemsHtml += `
+          <div class="flex items-center gap-1 py-1 border-b border-slate-100">
+            <span class="q-number text-xs">${i}.</span>
+            <div class="flex gap-1.5">${bubbles}</div>
+          </div>
+        `;
+      }
+
+      preview.innerHTML = `
+        <div class="border-b pb-2 mb-3 text-center">
+          <h3 class="font-bold text-sm uppercase">Escola Estadual São Tomaz de Aquino</h3>
+          <p class="font-semibold text-xs text-blue-900">${nome}</p>
+          <div class="flex justify-between text-[10px] text-slate-500 mt-2">
+            <span>Aluno: NOME DO ALUNO</span>
+            <span>Turma: NOME DA TURMA</span>
+          </div>
+        </div>
+        <div class="grid ${gridColsClass} gap-x-4 gap-y-1">
+          ${itemsHtml}
+        </div>
+      `;
+    }
+
+    function saveAvaliacao() {
+      const nome = document.getElementById('prova-nome').value.trim();
+      const valor = parseFloat(document.getElementById('prova-valor').value) || 10;
+      const numQuestoes = parseInt(document.getElementById('prova-num-questoes').value) || 10;
+      const opcoes = parseInt(document.getElementById('prova-opcoes').value);
+      const formato = document.getElementById('prova-formato').value;
+      const colunas = parseInt(document.getElementById('prova-colunas').value);
+
+      const turmas = Array.from(document.querySelectorAll('.turma-checkbox:checked')).map(cb => cb.value);
+      if (!nome) return alert('Informe o nome da avaliação.');
+      if (turmas.length === 0) return alert('Selecione ao menos uma turma.');
+
+      const gabaritoOficial = {};
+      document.querySelectorAll('.gabarito-resposta-item').forEach(item => {
+        gabaritoOficial[item.getAttribute('data-q')] = item.value;
+      });
+
+      const avaliacao = {
+        id: 'p_' + Date.now(),
+        nome, valor, numQuestoes, opcoes, formato, colunas, turmas, gabaritoOficial
+      };
+
+      db.avaliacoes.push(avaliacao);
+      saveData();
+      alert('Avaliação salva com sucesso!');
+      switchTab('gabaritos');
+    }
+
+    // --- MÓDULO 3: GERAR PDF GABARITOS INDIVIDUALIZADOS ---
+    function renderSelectAvaliacaoPDF() {
+      const select = document.getElementById('select-avaliacao-pdf');
+      select.innerHTML = '<option value="">Selecione uma avaliação...</option>';
+      db.avaliacoes.forEach(p => {
+        select.innerHTML += `<option value="${p.id}">${p.nome}</option>`;
+      });
+    }
+
+    function renderPDFGabaritos() {
+      const avaliacaoId = document.getElementById('select-avaliacao-pdf').value;
+      if (!avaliacaoId) return alert('Selecione uma avaliação.');
+
+      const avaliacao = db.avaliacoes.find(p => p.id === avaliacaoId);
+      const printArea = document.getElementById('print-area-gabaritos');
+      printArea.innerHTML = '';
+      printArea.classList.remove('hidden');
+
+      // Buscar todos os alunos das turmas selecionadas na prova
+      let alunosParaGabarito = [];
+      avaliacao.turmas.forEach(tId => {
+        const turm = db.turmas.find(t => t.id === tId);
+        const aluns = db.alunos.filter(a => a.turmaId === tId);
+        aluns.forEach(a => {
+          alunosParaGabarito.push({ aluno: a, turma: turm });
+        });
+      });
+
+      if (alunosParaGabarito.length === 0) return alert('Nenhum aluno encontrado nas turmas dessa avaliação.');
+
+      const letras = ['A', 'B', 'C', 'D', 'E'].slice(0, avaliacao.opcoes);
+      let gridColsClass = 'grid-cols-1';
+      if (avaliacao.colunas === 2) gridColsClass = 'grid-cols-2';
+      if (avaliacao.colunas === 3) gridColsClass = 'grid-cols-3';
+
+      alunosParaGabarito.forEach((item, index) => {
+        const qrPayload = JSON.stringify({ aId: item.aluno.id, pId: avaliacao.id });
+        const qrId = `qrcode-${index}`;
+
+        let itemsHtml = '';
+        for (let i = 1; i <= avaliacao.numQuestoes; i++) {
+          let bubbles = letras.map(l => `<span class="bubble bubble-${avaliacao.formato}">${l}</span>`).join(' ');
+          itemsHtml += `
+            <div class="flex items-center gap-1 py-1 border-b border-slate-200">
+              <span class="q-number text-xs">${i}.</span>
+              <div class="flex gap-2">${bubbles}</div>
+            </div>
+          `;
+        }
+
+        const pageHtml = `
+          <div class="sheet-a4 page-break flex flex-col justify-between font-sans">
+            <div>
+              <!-- Cabeçalho -->
+              <div class="border-b-2 border-black pb-3 mb-4 flex justify-between items-center">
+                <div>
+                  <h1 class="text-base font-bold uppercase tracking-wide">Escola Estadual São Tomaz de Aquino</h1>
+                  <h2 class="text-sm font-semibold text-slate-800">${avaliacao.nome}</h2>
+                  <p class="text-xs text-slate-700 mt-1"><strong>Aluno:</strong> ${item.aluno.nome}</p>
+                  <p class="text-xs text-slate-700"><strong>Turma:</strong> ${item.turma ? item.turma.nome : ''}</p>
+                </div>
+                <div id="${qrId}" class="p-1 border border-black bg-white"></div>
+              </div>
+
+              <!-- Cartão de Respostas -->
+              <div class="mb-4">
+                <p class="text-[10px] uppercase font-bold text-slate-600 mb-2">Instruções: Preencha completamente o campo da resposta correta.</p>
+                <div class="grid ${gridColsClass} gap-x-6 gap-y-1">
+                  ${itemsHtml}
+                </div>
+              </div>
+            </div>
+
+            <!-- Rodapé Assinatura -->
+            <div class="mt-8 pt-4 border-t border-slate-300 text-center">
+              <div class="w-64 mx-auto border-b border-black mb-1"></div>
+              <p class="text-xs font-bold uppercase">${item.aluno.nome}</p>
+              <p class="text-[10px] text-slate-500">Assinatura do Aluno</p>
+            </div>
+          </div>
+        `;
+
+        printArea.innerHTML += pageHtml;
+
+        // Gerar QR Code
+        setTimeout(() => {
+          new QRCode(document.getElementById(qrId), {
+            text: qrPayload,
+            width: 64,
+            height: 64
+          });
+        }, 50);
+      });
+
+      // Acionar Impressão / Salvar PDF
+      setTimeout(() => {
+        window.print();
+      }, 500);
+    }
+
+    // --- MÓDULO 4: LEITOR & CORREÇÃO ---
+    function startScanner() {
+      if (html5QrCode) stopScanner();
+      html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        onScanSuccess
+      ).catch(err => alert("Erro ao acessar a câmera: " + err));
+    }
+
+    function stopScanner() {
+      if (html5QrCode) {
+        html5QrCode.stop().then(() => {
+          html5QrCode.clear();
+        }).catch(err => console.error(err));
+      }
+    }
+
+    function onScanSuccess(decodedText) {
+      try {
+        const data = JSON.parse(decodedText);
+        if (data.aId && data.pId) {
+          processarLeitura(data.aId, data.pId);
+        }
+      } catch (e) {
+        console.log("QR Code não reconhecido pelo sistema.");
+      }
+    }
+
+    function processarLeitura(alunoId, provaId) {
+      const aluno = db.alunos.find(a => a.id === alunoId);
+      const prova = db.avaliacoes.find(p => p.id === provaId);
+      const turma = aluno ? db.turmas.find(t => t.id === aluno.turmaId) : null;
+
+      if (!aluno || !prova) return alert('QR Code inválido ou dados não encontrados.');
+
+      currentScanData = { aluno, prova, turma };
+
+      const infoContainer = document.getElementById('scan-info');
+      infoContainer.innerHTML = `
+        <p><strong>Escola Estadual São Tomaz de Aquino</strong></p>
+        <p><strong>Aluno:</strong> ${aluno.nome}</p>
+        <p><strong>Turma:</strong> ${turma ? turma.nome : ''}</p>
+        <p><strong>Prova:</strong> ${prova.nome}</p>
+      `;
+
+      const qContainer = document.getElementById('questoes-manual-input');
+      qContainer.innerHTML = '';
+      const letras = ['A', 'B', 'C', 'D', 'E'].slice(0, prova.opcoes);
+
+      for (let i = 1; i <= prova.numQuestoes; i++) {
+        let optsHtml = letras.map(l => `<option value="${l}">${l}</option>`).join('');
+        qContainer.innerHTML += `
+          <div class="flex items-center gap-1">
+            <span class="font-bold w-5 text-xs">${i}:</span>
+            <select class="res-aluno-item border rounded px-1 py-0.5 text-xs w-full" data-q="${i}">
+              ${optsHtml}
+            </select>
+          </div>
+        `;
+      }
+
+      document.getElementById('scan-result').classList.remove('hidden');
+    }
+
+    function salvarNotaLeitura() {
+      if (!currentScanData) return;
+
+      const { aluno, prova } = currentScanData;
+      const respostasAluno = {};
+      let acertos = 0;
+
+      document.querySelectorAll('.res-aluno-item').forEach(select => {
+        const q = select.getAttribute('data-q');
+        const resp = select.value;
+        respostasAluno[q] = resp;
+
+        if (prova.gabaritoOficial[q] === resp) {
+          acertos++;
+        }
+      });
+
+      const valorPorQuestao = prova.valor / prova.numQuestoes;
+      const notaFinal = acertos * valorPorQuestao;
+
+      // Salvar ou atualizar resposta
+      const existingIndex = db.respostas.findIndex(r => r.alunoId === aluno.id && r.provaId === prova.id);
+      const registro = {
+        alunoId: aluno.id,
+        turmaId: aluno.turmaId,
+        provaId: prova.id,
+        respostas: respostasAluno,
+        acertos,
+        notaFinal
+      };
+
+      if (existingIndex !== -1) {
+        db.respostas[existingIndex] = registro;
+      } else {
+        db.respostas.push(registro);
+      }
+
+      saveData();
+      alert(`Correção Salva!\nAluno: ${aluno.nome}\nAcertos: ${acertos}/${prova.numQuestoes}\nNota: ${notaFinal.toFixed(1)} / ${prova.valor}`);
+      document.getElementById('scan-result').classList.add('hidden');
+    }
+
+    // --- MÓDULO 5: RELATÓRIOS E PLANILHAS ---
+    function setupRelatoriosSelects() {
+      const selProva = document.getElementById('relatorio-avaliacao-id');
+      const selTurma = document.getElementById('relatorio-turma-id');
+
+      selProva.innerHTML = '<option value="">Selecione a prova...</option>';
+      selTurma.innerHTML = '<option value="">Selecione a turma...</option>';
+
+      db.avaliacoes.forEach(p => selProva.innerHTML += `<option value="${p.id}">${p.nome}</option>`);
+      db.turmas.forEach(t => selTurma.innerHTML += `<option value="${t.id}">${t.nome}</option>`);
+    }
+
+    function renderRelatorio() {
+      const provaId = document.getElementById('relatorio-avaliacao-id').value;
+      const turmaId = document.getElementById('relatorio-turma-id').value;
+      const tbody = document.getElementById('relatorio-tbody');
+      const headerText = document.getElementById('relatorio-header-turma-prova');
+
+      if (!provaId || !turmaId) {
+        tbody.innerHTML = '<tr><td colspan="5" class="p-3 text-center text-slate-400">Selecione a prova e a turma acima.</td></tr>';
+        return;
+      }
+
+      const prova = db.avaliacoes.find(p => p.id === provaId);
+      const turma = db.turmas.find(t => t.id === turmaId);
+
+      headerText.innerText = `TURMA: ${turma ? turma.nome : ''} | AVALIAÇÃO: ${prova ? prova.nome : ''} (VALOR: ${prova ? prova.valor : 0})`;
+
+      // Buscar alunos em ordem alfabética
+      const alunosTurma = db.alunos.filter(a => a.turmaId === turmaId).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
+      tbody.innerHTML = '';
+      alunosTurma.forEach((aluno, idx) => {
+        const resp = db.respostas.find(r => r.alunoId === aluno.id && r.provaId === provaId);
+
+        let acertos = resp ? `${resp.acertos} / ${prova.numQuestoes}` : '-';
+        let nota = resp ? resp.notaFinal.toFixed(1) : '-';
+        let status = resp ? '<span class="text-green-600 font-bold">Corrigido</span>' : '<span class="text-amber-600">Pendente</span>';
+
+        tbody.innerHTML += `
+          <tr class="border-b border-slate-200">
+            <td class="p-2 border border-slate-300 font-bold">${idx + 1}</td>
+            <td class="p-2 border border-slate-300">${aluno.nome}</td>
+            <td class="p-2 border border-slate-300 text-center">${acertos}</td>
+            <td class="p-2 border border-slate-300 text-center font-bold text-blue-700">${nota}</td>
+            <td class="p-2 border border-slate-300 text-center text-[10px]">${status}</td>
+          </tr>
+        `;
+      });
+    }
+
+    function imprimirRelatorio() {
+      window.print();
+    }
+
+    // Inicialização
+    renderTurmasList();
+  </script>
+</body>
+</html>
